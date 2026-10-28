@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>羊了个羊 · 三消小游戏</title>
+<style>
+  :root {
+    --tile: 56px;
+    --cell: 62px;
+    --shift: 30px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #7ec8f0 0%, #c9ecfb 35%, #a8e063 35.1%, #7ec850 70%, #5aa63a 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+    overflow: hidden;
+    min-height: 100vh;
+  }
+
+  header {
+    text-align: center;
+    padding: 10px 0 4px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0,0,0,.35);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 2px;
+  }
+  header .sub {
+    font-size: 13px;
+    opacity: .92;
+    margin-top: 2px;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 8px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    border: none;
+    border-radius: 22px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    box-shadow: 0 3px 0 rgba(0,0,0,.18);
+    transition: transform .08s, box-shadow .08s, filter .2s;
+    background: #6b5bff;
+    letter-spacing: 1px;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+  .btn.off { filter: grayscale(1) brightness(.7); cursor: not-allowed; }
+  .btn.tool { background: #ff9f43; }
+  .btn.gray { background: #8a97a8; }
+  .btn.cheat { background: #e74c3c; }
+  .btn.gold { background: #f1c40f; color: #5a3e00; }
+  #cheatPanel {
+    display: none; gap: 10px; align-items: center;
+    flex-wrap: wrap; justify-content: center; margin: 2px 0 8px;
+  }
+  #cheatPanel span { color: #fff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+  .diff {
+    display: flex; gap: 6px;
+  }
+  .diff .btn { background: #3cc06e; }
+  .diff .btn.active { background: #1f8f4e; box-shadow: 0 0 0 2px #fff inset; }
+
+  #board {
+    position: relative;
+    margin: 6px auto;
+  }
+  .tile {
+    position: absolute;
+    width: var(--tile);
+    height: var(--tile);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    cursor: pointer;
+    background: linear-gradient(160deg, #fffdf5 0%, #f3e8c8 60%, #e8d6a6 100%);
+    border: 2px solid #d9c380;
+    box-shadow: 0 3px 6px rgba(60,40,0,.25), inset 0 1px 0 #fff;
+    transition: transform .1s, filter .15s, opacity .15s;
+  }
+  .tile.covered {
+    filter: brightness(.55) saturate(.8);
+    cursor: not-allowed;
+    box-shadow: 0 1px 2px rgba(60,40,0,.3), inset 0 1px 0 #ffffff55;
+  }
+  .tile.top:hover { transform: translateY(-3px); }
+  .tile.top { box-shadow: 0 6px 10px rgba(60,40,0,.3), inset 0 1px 0 #fff; }
+  .tile.pop { animation: pop .18s ease; }
+  @keyframes pop { 0% { transform: scale(.6); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+  .slot-zone {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    position: relative; z-index: 50;
+  }
+  .hold-row {
+    display: flex; gap: 6px; min-height: 0; transition: .2s;
+  }
+  .hold-row:empty { display: none; }
+  .hold-tile {
+    width: 46px; height: 46px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; cursor: pointer;
+    background: linear-gradient(160deg, #ffe9b8, #f6cf7e);
+    border: 2px dashed #b98a3a;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2);
+  }
+  .slot-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,.28);
+    border-radius: 20px;
+    border: 2px solid rgba(255,255,255,.5);
+    backdrop-filter: blur(3px);
+  }
+  .slot-cell {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    border: 2px dashed rgba(255,255,255,.7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    background: rgba(255,255,255,.12);
+    position: relative;
+  }
+  .slot-cell.filled {
+    background: linear-gradient(160deg, #fffdf5, #f3e8c8);
+    border: 2px solid #d9c380;
+    animation: pop .18s ease;
+  }
+
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  .overlay.show { display: flex; }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 30px 40px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+    animation: pop .3s ease;
+  }
+  .card h2 { margin: 0 0 6px; font-size: 34px; }
+  .card .emoji { font-size: 70px; }
+  .card p { color: #666; margin: 8px 0 18px; }
+  .card .btn { background: #3cc06e; font-size: 16px; padding: 10px 28px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🐑 羊了个羊</h1>
+    <div class="sub">点击方块放入底部槽位 · 三个相同即消除 · 槽满则失败</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="diff">
+      <button class="btn d" data-d="easy">简单</button>
+      <button class="btn d active" data-d="normal">普通</button>
+      <button class="btn d" data-d="hard">困难</button>
+    </div>
+    <button class="btn tool" id="btnUndo">↩ 撤回</button>
+    <button class="btn tool" id="btnShuffle">🔀 洗牌</button>
+    <button class="btn tool" id="btnMove">📤 移出3张</button>
+    <button class="btn gray" id="btnRestart">🔄 重开</button>
+    <button class="btn gray" id="btnMusic">🎵 音乐: 开</button>
+    <button class="btn cheat" id="btnCheat">🔓 破解: 关</button>
+  </div>
+
+  <div id="cheatPanel">
+    <button class="btn gold" id="btnWin">🐑 一键过关</button>
+    <button class="btn cheat" id="btnClearSlot">🧹 清空槽位</button>
+    <span>♾ 道具无限 · 无视遮挡 · 槽位永不触发失败</span>
+  </div>
+
+  <div id="board"></div>
+
+  <div class="slot-zone">
+    <div class="hold-row" id="hold"></div>
+    <div class="slot-bar" id="slotBar"></div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <div class="emoji" id="ovEmoji">🎉</div>
+      <h2 id="ovTitle">过关！</h2>
+      <p id="ovText">太棒了，全部消除！</p>
+      <button class="btn" onclick="restart()">再来一局</button>
+    </div>
+  </div>
+
+<script>
+const ICONS = ['🐑','🐄','🐔','🐖','🐇','🐓','🦆','🐴','🐐','🥕','🌽','🍎','🍇','🌻','🥬'];
+const DIFFS = {
+  easy:   { tiles: 27, layers: [4,3,2] },
+  normal: { tiles: 45, layers: [5,4,3] },
+  hard:   { tiles: 63, layers: [6,5,4] },
+};
+const TOOL_LIMITS = { undo: 3, shuffle: 2, move: 2 };
+
+let diff = 'normal';
+let tiles = [];       // board tiles
+let slot = [];        // main buffer (max 7)
+let hold = [];        // extra hold (max 3)
+let history = [];     // undo stack
+let tools = { undo: 0, shuffle: 0, move: 0 };
+let idc = 0;
+let over = false;
+let cheat = false;
+
+const board = document.getElementById('board');
+const slotBarEl = document.getElementById('slotBar');
+const holdEl = document.getElementById('hold');
+
+/* ============ 声音系统（Web Audio 合成，无需外部文件） ============ */
+const FREQ = {
+  'G2':98.0, 'A2':110.0, 'F2':87.31,
+  'C3':130.81,'D3':146.83,'E3':164.81,'F3':174.61,'G3':196.0,'A3':220.0,'B3':246.94,
+  'C4':261.63,'D4':293.66,'E4':329.63,'F4':349.23,'G4':392.0,'A4':440.0,'B4':493.88,
+  'C5':523.25,'D5':587.33,'E5':659.25,'G5':783.99,'A5':880.0,'C6':1046.5
+};
+// 暗黑小调循环：Am - F - G - Am，8 分音符低音脉冲驱动
+const BGM_MELODY = [
+  {n:'A4',d:.5,b:'A2'},{n:null,d:.5},{n:'C5',d:.5,b:'A2'},{n:null,d:.5},
+  {n:'E5',d:.5,b:'A2'},{n:null,d:.5},{n:'C5',d:.5},{n:null,d:.5},
+  {n:'F4',d:.5,b:'F2'},{n:null,d:.5},{n:'A4',d:.5,b:'F2'},{n:null,d:.5},
+  {n:'C5',d:.5,b:'F2'},{n:null,d:.5},{n:'A4',d:.5},{n:null,d:.5},
+  {n:'G4',d:.5,b:'G2'},{n:null,d:.5},{n:'B4',d:.5,b:'G2'},{n:null,d:.5},
+  {n:'D5',d:.5,b:'G2'},{n:null,d:.5},{n:'B4',d:.5},{n:null,d:.5},
+  {n:'E5',d:.5,b:'A2'},{n:null,d:.5},{n:'D5',d:.5,b:'A2'},{n:null,d:.5},
+  {n:'C5',d:.5,b:'A2'},{n:null,d:.5},{n:'B4',d:.5},{n:null,d:.5},
+];
+
+let actx = null;
+let musicGain = null;
+let musicFilter = null;
+let bgmTimer = null;
+let bgmStep = 0;
+let nextNote = 0;
+let musicOn = true;
+
+function ensureCtx(){
+  if(!actx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) actx = new AC();
+  }
+  if(actx && actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+function tone(freq, when, dur, opts){
+  if(!actx || !freq) return;
+  opts = opts || {};
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = opts.type || 'sine';
+  o.frequency.setValueAtTime(freq, when);
+  o.connect(g);
+  g.connect(opts.dest || actx.destination);
+  const v = opts.vol || 0.2;
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(v, when + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  o.start(when);
+  o.stop(when + dur + 0.06);
+}
+
+// 暗黑音色：过低通滤波的双振荡器（可轻微失谐加厚）
+function darkTone(freq, when, dur, vol, type, det){
+  if(!actx || !freq) return;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(vol, when + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  g.connect(musicGain);
+  const d = (det === undefined) ? 8 : det;
+  for(const detune of [0, d]){
+    const o = actx.createOscillator();
+    o.type = type || 'sawtooth';
+    o.frequency.setValueAtTime(freq, when);
+    if(detune) o.detune.setValueAtTime(detune, when);
+    o.connect(g);
+    o.start(when); o.stop(when + dur + 0.06);
+  }
+}
+
+function startBGM(){
+  if(!ensureCtx() || bgmTimer) return;
+  if(!musicGain){
+    musicFilter = actx.createBiquadFilter();
+    musicFilter.type = 'lowpass';
+    musicFilter.frequency.value = 1500;
+    musicGain = actx.createGain();
+    musicGain.gain.value = 0.6;
+    musicGain.connect(musicFilter);
+    musicFilter.connect(actx.destination);
+  }
+  const beat = 60 / 120;
+  nextNote = actx.currentTime + 0.1;
+  bgmStep = 0;
+  const schedule = ()=>{
+    while(nextNote < actx.currentTime + 0.35){
+      const m = BGM_MELODY[bgmStep % BGM_MELODY.length];
+      if(m.n) darkTone(FREQ[m.n], nextNote, m.d*beat*1.05, 0.055, 'sawtooth');
+      if(m.b){
+        darkTone(FREQ[m.b], nextNote, 0.16, 0.20, 'square');                // 短促低音脉冲
+        darkTone(FREQ[m.b]/2, nextNote, m.d*beat*0.85, 0.08, 'triangle', 0); // 低音铺底
+      }
+      nextNote += m.d * beat;
+      bgmStep++;
+    }
+  };
+  schedule();
+  bgmTimer = setInterval(schedule, 120);
+}
+
+function stopBGM(){
+  if(bgmTimer){ clearInterval(bgmTimer); bgmTimer = null; }
+}
+
+function toggleMusic(){
+  musicOn = !musicOn;
+  const b = document.getElementById('btnMusic');
+  if(musicOn){ b.textContent = '🎵 音乐: 开'; b.classList.remove('off'); startBGM(); }
+  else { b.textContent = '🎵 音乐: 关'; b.classList.add('off'); stopBGM(); }
+}
+
+function sfxClick(){ ensureCtx(); const t = actx.currentTime; tone(660, t, 0.07, {type:'sine', vol:0.10}); tone(990, t+0.02, 0.05, {type:'sine', vol:0.05}); }
+function sfxMatch(){ ensureCtx(); const t = actx.currentTime; [['E5',0],['G5',0.06],['C6',0.12]].forEach(x=> tone(FREQ[x[0]], t+x[1], 0.20, {type:'sine', vol:0.18})); }
+function sfxShuffle(){ ensureCtx(); const t = actx.currentTime; for(let i=0;i<6;i++){ tone(300+Math.random()*500, t+i*0.05, 0.06, {type:'sawtooth', vol:0.05}); } }
+function sfxUndo(){ ensureCtx(); const t = actx.currentTime; tone(500, t, 0.08, {type:'sine', vol:0.10}); tone(700, t+0.05, 0.08, {type:'sine', vol:0.10}); }
+function sfxWin(){ ensureCtx(); const t = actx.currentTime; [['C5',0],['E5',0.09],['G5',0.18],['C6',0.27]].forEach(x=> tone(FREQ[x[0]], t+x[1], 0.22, {type:'sine', vol:0.2})); }
+function sfxLose(){ ensureCtx(); const t = actx.currentTime; [['G4',0],['E4',0.12],['C4',0.24]].forEach(x=> tone(FREQ[x[0]], t+x[1], 0.25, {type:'sine', vol:0.18})); }
+
+// 首次交互解锁音频并启动音乐
+document.addEventListener('pointerdown', function(){
+  if(!actx){ ensureCtx(); if(musicOn) startBGM(); }
+}, { passive: true });
+
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+function buildLayout(target, layerSizes){
+  const cells = [];
+  for(let li=0; li<layerSizes.length; li++){
+    const s = layerSizes[li];
+    for(let r=0; r<s; r++) for(let c=0; c<s; c++) cells.push({r,c,layer:li});
+  }
+  let toRemove = cells.length - target;
+  const prio = t => {
+    const s = layerSizes[t.layer];
+    const center = (s-1)/2;
+    const d = Math.max(Math.abs(t.r-center), Math.abs(t.c-center));
+    return t.layer*1000 + d;
+  };
+  cells.sort((a,b)=> prio(b)-prio(a)); // 高优先(上层/外圈)排前
+  cells.splice(0, toRemove);
+
+  // 分配图标（3 的倍数）
+  const icons = [];
+  let i = 0;
+  while(icons.length < cells.length){
+    for(let k=0;k<3;k++) icons.push(ICONS[i % ICONS.length]);
+    i++;
+  }
+  shuffle(icons);
+  cells.forEach((cell,i)=> cell.icon = icons[i]);
+  return cells;
+}
+
+function pos(t){ return { x: t.c*62 - t.layer*30, y: t.r*62 - t.layer*30 }; }
+
+function isBlocked(tile){
+  if(cheat) return false;
+  for(const t of tiles){
+    if(t.layer === tile.layer+1){
+      if((t.r===tile.r || t.r===tile.r+1) && (t.c===tile.c || t.c===tile.c+1)) return true;
+    }
+  }
+  return false;
+}
+
+function render(){
+  // 计算边界
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for(const t of tiles){
+    const p = pos(t);
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x+56); maxY = Math.max(maxY, p.y+56);
+  }
+  const pad = 10;
+  board.style.width = (maxX-minX+pad*2)+'px';
+  board.style.height = (maxY-minY+pad*2)+'px';
+  board.innerHTML = '';
+
+  for(const t of tiles){
+    const p = pos(t);
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.textContent = t.icon;
+    el.style.left = (p.x - minX + pad) + 'px';
+    el.style.top  = (p.y - minY + pad) + 'px';
+    el.style.zIndex = t.layer*20 + t.r + t.c;
+    t.el = el;
+    if(isBlocked(t)) el.classList.add('covered');
+    else el.classList.add('top');
+    el.addEventListener('click', ()=> onTileClick(t));
+    board.appendChild(el);
+  }
+  renderSlot();
+  renderHold();
+  renderTools();
+}
+
+function updateCovered(){
+  for(const t of tiles){
+    if(!t.el) continue;
+    if(isBlocked(t)){ t.el.classList.remove('top'); t.el.classList.add('covered'); }
+    else { t.el.classList.remove('covered'); t.el.classList.add('top'); }
+  }
+}
+
+function onTileClick(tile){
+  if(over) return;
+  if(isBlocked(tile)){
+    tile.el.classList.remove('pop');
+    void tile.el.offsetWidth;
+    tile.el.style.transform = 'translateX(0)';
+    return;
+  }
+  moveToSlot(tile);
+}
+
+function moveToSlot(tile, fromHold=false){
+  if(fromHold){
+    hold = hold.filter(h=>h!==tile);
+  } else {
+    const idx = tiles.indexOf(tile);
+    if(idx>=0) tiles.splice(idx,1);
+    tile.el.remove();
+  }
+  slot.push(tile);
+  sfxClick();
+  history.push(tile);
+  if(!fromHold) updateCovered();
+  const before = slot.length;
+  resolveMatches();
+  if(slot.length < before) sfxMatch();
+  render();
+  checkEnd();
+}
+
+function onHoldClick(tile){
+  if(over) return;
+  moveToSlot(tile, true);
+}
+
+function resolveMatches(){
+  let changed = true;
+  while(changed){
+    changed = false;
+    const count = {};
+    for(const t of slot) count[t.icon] = (count[t.icon]||0)+1;
+    for(const icon in count){
+      if(count[icon] >= 3){
+        let removed = 0;
+        for(let i=slot.length-1; i>=0 && removed<3; i--){
+          if(slot[i].icon === icon){ slot.splice(i,1); removed++; }
+        }
+        history = history.filter(h=> h._used).concat([]);
+        changed = true;
+      }
+    }
+  }
+}
+
+function checkEnd(){
+  if(tiles.length === 0){
+    endGame(true);
+    return;
+  }
+  if(!cheat && slot.length > 7){
+    endGame(false);
+  }
+}
+
+function endGame(win){
+  win ? sfxWin() : sfxLose();
+  over = true;
+  const ov = document.getElementById('overlay');
+  document.getElementById('ovEmoji').textContent = win ? '🎉' : '😵';
+  document.getElementById('ovTitle').textContent = win ? '过关啦！' : '槽位已满';
+  document.getElementById('ovText').textContent = win ? '太棒了，全部消除！' : '差一点点，再来一局吧～';
+  ov.classList.add('show');
+}
+
+function renderSlot(){
+  slotBarEl.innerHTML = '';
+  for(let i=0;i<7;i++){
+    const cell = document.createElement('div');
+    cell.className = 'slot-cell';
+    if(slot[i]){
+      cell.classList.add('filled');
+      cell.textContent = slot[i].icon;
+    }
+    slotBarEl.appendChild(cell);
+  }
+  if(slot.length >= 7){
+    slotBarEl.style.boxShadow = '0 0 0 2px #ff5b5b, 0 0 16px #ff5b5b88';
+  } else {
+    slotBarEl.style.boxShadow = 'none';
+  }
+}
+
+function renderHold(){
+  holdEl.innerHTML = '';
+  for(const h of hold){
+    const el = document.createElement('div');
+    el.className = 'hold-tile';
+    el.textContent = h.icon;
+    el.addEventListener('click', ()=> onHoldClick(h));
+    holdEl.appendChild(el);
+  }
+}
+
+function limitOf(k){ return cheat ? Infinity : TOOL_LIMITS[k]; }
+function remaining(k){ const l = limitOf(k); return l === Infinity ? '∞' : (l - tools[k]); }
+
+function renderTools(){
+  setTool('btnUndo', tools.undo < limitOf('undo'), `↩ 撤回${remaining('undo')}`);
+  setTool('btnShuffle', tools.shuffle < limitOf('shuffle'), `🔀 洗牌${remaining('shuffle')}`);
+  setTool('btnMove', tools.move < limitOf('move'), `📤 移出3张${remaining('move')}`);
+}
+function setTool(id, on, label){
+  const b = document.getElementById(id);
+  b.textContent = label;
+  b.classList.toggle('off', !on);
+}
+
+function doUndo(){
+  if(over) return;
+  if(tools.undo >= limitOf('undo')) return;
+  // 从历史里找一个仍在槽位中的方块
+  for(let i=history.length-1; i>=0; i--){
+    const t = history[i];
+    const idx = slot.indexOf(t);
+    if(idx>=0){
+      slot.splice(idx,1);
+      history.splice(i,1);
+      tiles.push(t);
+      tools.undo++;
+      sfxUndo();
+      render();
+      break;
+    }
+  }
+  // 历史里可能有已消除的残留，清理
+  history = history.filter(t=> slot.includes(t) || tiles.includes(t));
+}
+
+function doShuffle(){
+  if(over || tools.shuffle >= limitOf('shuffle')) return;
+  const icons = tiles.map(t=>t.icon);
+  shuffle(icons);
+  tiles.forEach((t,i)=> t.icon = icons[i]);
+  tools.shuffle++;
+  sfxShuffle();
+  render();
+}
+
+function doMove(){
+  if(over || tools.move >= limitOf('move')) return;
+  const movable = tiles.filter(t=> !isBlocked(t));
+  const pick = shuffle(movable).slice(0, 3-Math.max(0, hold.length));
+  if(pick.length === 0) return;
+  for(const t of pick){
+    tiles.splice(tiles.indexOf(t),1);
+  }
+  for(const t of pick){
+    t.el.remove();
+    hold.push(t);
+  }
+  if(hold.length > 3) hold.length = 3;
+  tools.move++;
+  sfxClick();
+  updateCovered();
+  render();
+}
+
+function toggleCheat(){
+  cheat = !cheat;
+  document.getElementById('btnCheat').textContent = cheat ? '🔓 破解: 开' : '🔓 破解: 关';
+  document.getElementById('btnCheat').classList.toggle('off', !cheat);
+  document.getElementById('cheatPanel').style.display = cheat ? 'flex' : 'none';
+  updateCovered();
+  renderTools();
+}
+
+function cheatWin(){
+  if(over) return;
+  tiles = []; slot = []; hold = []; history = [];
+  render();
+  endGame(true);
+}
+
+function clearSlot(){
+  if(over) return;
+  slot = []; hold = [];
+  renderSlot(); renderHold();
+}
+
+function restart(){
+  over = false;
+  document.getElementById('overlay').classList.remove('show');
+  tiles = []; slot = []; hold = []; history = []; idc = 0;
+  tools = { undo:0, shuffle:0, move:0 };
+  start();
+}
+
+function start(){
+  const cfg = DIFFS[diff];
+  tiles = buildLayout(cfg.tiles, cfg.layers).map(t=>({...t, id: idc++}));
+  render();
+}
+
+// 事件绑定
+document.getElementById('btnUndo').onclick = doUndo;
+document.getElementById('btnShuffle').onclick = doShuffle;
+document.getElementById('btnMove').onclick = doMove;
+document.getElementById('btnRestart').onclick = restart;
+document.getElementById('btnMusic').onclick = toggleMusic;
+document.getElementById('btnCheat').onclick = toggleCheat;
+document.getElementById('btnWin').onclick = cheatWin;
+document.getElementById('btnClearSlot').onclick = clearSlot;
+document.querySelectorAll('.diff .d').forEach(btn=>{
+  btn.onclick = ()=>{
+    diff = btn.dataset.d;
+    document.querySelectorAll('.diff .d').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    restart();
+  };
+});
+
+start();
+</script>
+</body>
+</html>
